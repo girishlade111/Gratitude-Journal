@@ -1,0 +1,237 @@
+import { useState, useEffect } from 'react'
+import { Button } from "/components/ui/button"
+import { Card, CardContent, CardHeader, CardTitle } from "/components/ui/card"
+import { Textarea } from "/components/ui/textarea"
+import { Smile, Frown, Meh, Laugh, Angry, Download, Calendar } from "lucide-react"
+
+type Mood = 'happy' | 'sad' | 'neutral' | 'excited' | 'angry'
+type JournalEntry = {
+  id: string
+  date: string
+  content: string
+  mood: Mood
+  photo?: string
+}
+
+const moodIcons = {
+  happy: <Smile className="w-6 h-6 text-yellow-500" />,
+  sad: <Frown className="w-6 h-6 text-blue-500" />,
+  neutral: <Meh className="w-6 h-6 text-gray-500" />,
+  excited: <Laugh className="w-6 h-6 text-green-500" />,
+  angry: <Angry className="w-6 h-6 text-red-500" />,
+}
+
+const moodLabels = {
+  happy: 'Happy',
+  sad: 'Sad',
+  neutral: 'Neutral',
+  excited: 'Excited',
+  angry: 'Angry',
+}
+
+export default function GratitudeJournal() {
+  const [entries, setEntries] = useState<JournalEntry[]>([])
+  const [currentEntry, setCurrentEntry] = useState('')
+  const [selectedMood, setSelectedMood] = useState<Mood>('happy')
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null)
+  const [showPastEntries, setShowPastEntries] = useState(false)
+  const [groupedEntries, setGroupedEntries] = useState<Record<string, JournalEntry[]>>({})
+
+  // Load entries from localStorage on component mount
+  useEffect(() => {
+    const savedEntries = localStorage.getItem('gratitudeJournalEntries')
+    if (savedEntries) {
+      const parsedEntries = JSON.parse(savedEntries)
+      setEntries(parsedEntries)
+      groupEntriesByDate(parsedEntries)
+    }
+  }, [])
+
+  // Group entries by date when entries change
+  useEffect(() => {
+    groupEntriesByDate(entries)
+  }, [entries])
+
+  const groupEntriesByDate = (entries: JournalEntry[]) => {
+    const grouped: Record<string, JournalEntry[]> = {}
+    
+    entries.forEach(entry => {
+      if (!grouped[entry.date]) {
+        grouped[entry.date] = []
+      }
+      grouped[entry.date].push(entry)
+    })
+
+    setGroupedEntries(grouped)
+  }
+
+  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      const reader = new FileReader()
+      reader.onloadend = () => {
+        setPhotoPreview(reader.result as string)
+      }
+      reader.readAsDataURL(file)
+    }
+  }
+
+  const saveEntry = () => {
+    if (!currentEntry.trim()) return
+
+    const newEntry: JournalEntry = {
+      id: Date.now().toString(),
+      date: new Date().toLocaleDateString('en-US', { 
+        weekday: 'long', 
+        year: 'numeric', 
+        month: 'long', 
+        day: 'numeric' 
+      }),
+      content: currentEntry,
+      mood: selectedMood,
+      photo: photoPreview || undefined,
+    }
+
+    setEntries([newEntry, ...entries])
+    setCurrentEntry('')
+    setPhotoPreview(null)
+  }
+
+  const exportEntries = () => {
+    const exportData = entries.map(entry => ({
+      Date: entry.date,
+      Mood: moodLabels[entry.mood],
+      Content: entry.content,
+      Photo: entry.photo ? 'Yes' : 'No'
+    }))
+
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = 'gratitude-journal-entries.json'
+    link.click()
+    URL.revokeObjectURL(url)
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50 p-4 md:p-8">
+      <div className="max-w-3xl mx-auto">
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle className="text-2xl">Today's Gratitude Journal</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <Textarea
+                value={currentEntry}
+                onChange={(e) => setCurrentEntry(e.target.value)}
+                placeholder="What are you grateful for today?"
+                className="min-h-[200px]"
+              />
+
+              <div className="flex flex-wrap gap-2">
+                {Object.entries(moodIcons).map(([mood, icon]) => (
+                  <button
+                    key={mood}
+                    onClick={() => setSelectedMood(mood as Mood)}
+                    className={`p-2 rounded-full border-2 ${selectedMood === mood ? 'border-primary bg-primary/10' : 'border-transparent'}`}
+                    aria-label={moodLabels[mood as Mood]}
+                  >
+                    {icon}
+                  </button>
+                ))}
+              </div>
+
+              <div>
+                <label className="block mb-2 text-sm font-medium">
+                  Add a photo (optional)
+                </label>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handlePhotoUpload}
+                  className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-primary-foreground hover:file:bg-primary/90"
+                />
+                {photoPreview && (
+                  <div className="mt-2">
+                    <img
+                      src={photoPreview}
+                      alt="Preview"
+                      className="h-32 rounded-md object-cover"
+                    />
+                  </div>
+                )}
+              </div>
+
+              <Button onClick={saveEntry} className="w-full">
+                Save Today's Entry
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-xl font-bold">Journal History</h2>
+          <Button variant="outline" onClick={() => setShowPastEntries(!showPastEntries)}>
+            {showPastEntries ? 'Hide' : 'Show'} History
+          </Button>
+        </div>
+
+        {showPastEntries && (
+          <div className="space-y-6">
+            {entries.length === 0 ? (
+              <p className="text-center text-gray-500">No entries yet. Start by writing your first gratitude journal!</p>
+            ) : (
+              <>
+                <Button
+                  variant="outline"
+                  onClick={exportEntries}
+                  className="mb-4"
+                >
+                  <Download className="mr-2 h-4 w-4" />
+                  Export All Entries
+                </Button>
+
+                {Object.entries(groupedEntries).map(([date, dateEntries]) => (
+                  <div key={date} className="space-y-4">
+                    <div className="flex items-center gap-2 text-lg font-semibold text-gray-700">
+                      <Calendar className="w-5 h-5" />
+                      <span>{date}</span>
+                    </div>
+                    {dateEntries.map((entry) => (
+                      <Card key={entry.id}>
+                        <CardHeader className="flex flex-row justify-between items-start space-y-0">
+                          <div>
+                            <div className="flex items-center mt-1">
+                              <span className="mr-2">{moodIcons[entry.mood]}</span>
+                              <span className="text-sm text-muted-foreground">
+                                {moodLabels[entry.mood]}
+                              </span>
+                            </div>
+                          </div>
+                        </CardHeader>
+                        <CardContent>
+                          <p className="whitespace-pre-line">{entry.content}</p>
+                          {entry.photo && (
+                            <div className="mt-4">
+                              <img
+                                src={entry.photo}
+                                alt="Entry photo"
+                                className="max-h-48 rounded-md object-cover"
+                              />
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                ))}
+              </>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
